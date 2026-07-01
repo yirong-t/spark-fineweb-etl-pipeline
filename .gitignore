@@ -1,0 +1,50 @@
+# Python virtual environment and packaging
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Local Data Processing Sandboxes (Crucial for Big Data projects)
+data/
+*.parquet
+*.csv
+*.json
+/tmp/hf_cache/
+
+# Security & Cloud Credentials (NEVER commit these)
+config/gcp-service-account.json
+.env
+
+# Ide / System specific
+.DS_Store
+.vscode/
+
+# Local .terraform 
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files
+*.tfvars
+*.tfvars.json
+
+# Ignore override files as they are usually used to override resources locally and so
+# are not checked in
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore transient lock info files created by terraform apply
+.terraform.tfstate.lock.info
+
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
