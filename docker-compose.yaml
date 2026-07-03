@@ -12,11 +12,21 @@ x-airflow-common: &airflow-common
     # Spark tuning inside Docker
     SPARK_HOME: /home/airflow/.local/lib/python3.10/site-packages/pyspark
     PYTHONPATH: /home/airflow/.local/lib/python3.10/site-packages/pyspark/python:/home/airflow/.local/lib/python3.10/site-packages/pyspark/python/lib/py4j-0.10.9.7-src.zip
+    
+    # ─── ADDED PRODUCTION MODE & GCP TARGET VARIABLES ──────────────────────
+    ENV_MODE: PROD
+    GCS_BRONZE_BUCKET: fineweb-bronze-storage-bucket
+    GCP_PROJECT_ID: catalyst-chain-project
+    GOOGLE_APPLICATION_CREDENTIALS: /home/airflow/.config/gcloud/application_default_credentials.json
+
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
     - ./config:/opt/airflow/config
     - ./data:/opt/airflow/data
+    # ─── ADDED ADC PATH BRIDGE (Mounts your Mac's Google keys to Docker) ───
+    - ~/.config/gcloud:/home/airflow/.config/gcloud:ro
+
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:
@@ -69,6 +79,8 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    ports:
+      - "4040:4040"
     restart: always
     deploy:
       resources:

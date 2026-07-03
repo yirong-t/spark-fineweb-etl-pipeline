@@ -5,10 +5,11 @@ from pyspark.sql.functions import col, lower, trim, regexp_replace, length
 from delta import configure_spark_with_delta_pip
 
 def init_spark_session():
-    """Initializes a local Spark Session explicitly configured for Delta Lake."""
-    print("⚙️ Building Delta-enabled Spark Session...")
-
-    # Configure Spark to use Delta Lake extensions and catalogs
+    """Initializes a local Spark Session explicitly configured for Delta Lake and Shaded GCS."""
+    print("⚙️ Building Delta-enabled Spark Session with Shaded GCS Connector...")
+    
+    gcs_shaded_jar_url = "https://repo1.maven.org/maven2/com/google/cloud/bigdataoss/gcs-connector/hadoop3-2.2.14/gcs-connector-hadoop3-2.2.14-shaded.jar"
+    
     builder = SparkSession.builder \
         .appName("FineWeb_Silver_Processing") \
         .master("local[2]") \
@@ -16,12 +17,15 @@ def init_spark_session():
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
         .config("spark.databricks.delta.retentionDurationCheck.enabled", "false") \
         .config("spark.driver.memory", "2560m") \
-        .config("spark.executor.memory", "2048m")
-
-    # Resolves internal Maven coordinates for delta-core jars automatically via pip
-    spark = configure_spark_with_delta_pip(builder).getOrCreate()
+        .config("spark.executor.memory", "2048m") \
+        .config("spark.jars", gcs_shaded_jar_url) \
+        .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem") \
+        .config("spark.hadoop.fs.gs.abstract_filesystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS") \
+        .config("spark.hadoop.fs.gs.auth.type", "APPLICATION_DEFAULT")
+        
     print("✅ Spark Session successfully bound to Delta Lake Engine with 2.5G Heap!")
-    return spark
+
+    return configure_spark_with_delta_pip(builder).getOrCreate()
 
 def process_bronze_to_silver():
     spark = init_spark_session()
@@ -68,6 +72,7 @@ def process_bronze_to_silver():
         .save(output_path)
 
     print(f"🎉 Silver Layer successfully built! Total row count: {df_cleaned.count()}")
+    # input("⏸️ Spark job is complete! Spark UI is available at localhost:4040. Press Enter to exit...")
     spark.stop()
 
 if __name__ == "__main__":
