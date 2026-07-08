@@ -1,11 +1,14 @@
 import os
 import sys
+from datetime import datetime
+import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lower, trim, regexp_replace, length, current_timestamp, lit
 from delta import configure_spark_with_delta_pip
+from google.cloud import bigquery  # ─── Added for operational metadata auditing
 
 def init_spark_session():
-    """Initializes a local Spark Session explicitly configured for Delta Lake and Shaded GCS."""
+    """Initializes a local Spark Session with advanced high-throughput GCS tuning."""
     print("⚙️ Building Delta-enabled Spark Session with Shaded GCS Connector...")
     
     gcs_shaded_jar_url = "https://repo1.maven.org/maven2/com/google/cloud/bigdataoss/gcs-connector/hadoop3-2.2.14/gcs-connector-hadoop3-2.2.14-shaded.jar"
@@ -26,13 +29,11 @@ def init_spark_session():
         .config("spark.hadoop.fs.gs.write.chunk.size", "67108864")
         
     print("✅ Spark Session successfully bound to Delta Lake Engine with 2.5G Heap!")
-
     return configure_spark_with_delta_pip(builder).getOrCreate()
 
 def process_bronze_to_silver():
     spark = init_spark_session()
 
-    # Define environment-aware file system paths
     env_mode = os.getenv("ENV_MODE", "DEV").upper()
     print(f"🎬 Processing data in [{env_mode}] mode")
 
@@ -40,11 +41,11 @@ def process_bronze_to_silver():
         bucket_name = os.getenv("GCS_BRONZE_BUCKET")
         input_path = f"gs://{bucket_name}/bronze/fineweb/*.parquet"
         output_path = f"gs://{bucket_name}/silver/fineweb_cleaned"
-        dlq_path = f"gs://{bucket_name}/dlq/fineweb_errors"  # ─── GCS DLQ Path
+        dlq_path = f"gs://{bucket_name}/dlq/fineweb_errors"
     else:
         input_path = "/opt/airflow/data/bronze/sample/10BT/*.parquet"
         output_path = "/opt/airflow/data/silver/fineweb_cleaned"
-        dlq_path = "/opt/airflow/data/dlq/fineweb_errors"     # ─── Local DLQ Path
+        dlq_path = "/opt/airflow/data/dlq/fineweb_errors"
 
     # 1. Read Raw Bronze Data
     print(f"📖 Reading raw Parquet data from: {input_path}")
@@ -56,6 +57,9 @@ def process_bronze_to_silver():
     except Exception as e:
         print(f"❌ Failed to read Bronze Data. Ensure file exists. Error: {str(e)}")
         sys.exit(1)
+
+    print("📊 Source Schema Detected:")
+    df_raw.printSchema()
 
     # 2. Execute LLM Text Cleaning Operations
     print("🧼 Executing text normalization and data processing...")
@@ -72,11 +76,8 @@ def process_bronze_to_silver():
         (col("int_score") >= 0) & (col("int_score") <= 5)
     )
 
-    # ─── CONDITIONAL BRANCHING (The DLQ Core) ───────────────────────────────
-    # Branch A: Pristine Data
+    # Conditional Branching
     df_silver_good = df_transformed.filter(valid_record_condition)
-    
-    # Branch B: Malformed Data (Negating the condition)
     df_silver_bad = df_transformed.filter(~valid_record_condition) \
         .withColumn("rejection_reason", lit("Failed Invariant Verification (Null values, short text, or out-of-bounds score)")) \
         .withColumn("rejected_at", current_timestamp())
@@ -98,10 +99,36 @@ def process_bronze_to_silver():
     total_good = df_silver_good.count()
     total_bad = df_silver_bad.count()
     
-    print(f"🎉 Silver Layer Processing Complete!")
-    print(f"✅ Clean records preserved: {total_good}")
-    print(f"❌ Corrupted records isolated in DLQ: {total_bad}")
-    
+    print(f"🎉 Silver Layer Processing Complete! Clean: {total_good} | Isolated: {total_bad}")
+
+    # 6. METADATA AUDITING & BIGQUERY LOGGING (Step 6.3)
+    if env_mode == "PROD":
+        print("☁️ PROD Mode: Shipping operational audit metadata to BigQuery...")
+        
+        project_id = os.getenv("GCP_PROJECT_ID", "catalyst-chain-project")
+        bq_client = bigquery.Client(project=project_id)
+        table_id = f"{project_id}.fineweb_gold_layer.pipeline_audit_logs"
+        
+        # Package metrics into a clean audit schema
+        audit_entry = [{
+            "job_name": "silver_clean_processing",
+            "execution_timestamp": datetime.utcnow().isoformat(),
+            "env_mode": env_mode,
+            "records_processed_clean": int(total_good),
+            "records_rejected_dlq": int(total_bad),
+            "status": "SUCCESS"
+        }]
+        
+        audit_df = pd.DataFrame(audit_entry)
+        job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+        
+        try:
+            log_job = bq_client.load_table_from_dataframe(audit_df, table_id, job_config=job_config)
+            log_job.result()
+            print(f"📊 Audit metadata successfully appended to BigQuery logs: {table_id}")
+        except Exception as e:
+            print(f"⚠️ Audit logging telemetry failed to ship, but data job succeeded. Error: {str(e)}")
+
     spark.stop()
 
 if __name__ == "__main__":
