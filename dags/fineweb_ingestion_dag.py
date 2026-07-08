@@ -39,17 +39,25 @@ with DAG(
         bash_command="python /opt/airflow/src/processing/silver_clean.py",
     )
 
-    # Task 3: Token Estimation & Domain Profiling (Gold Layer)
-    load_gold_metrics = BashOperator(
-        task_id="generate_gold_profile_warehouse",
-        bash_command="python /opt/airflow/src/processing/gold_load.py",
-    )
+    
 
-    # task 4: Lakehouse optimization &  Compaction
+    # task : Lakehouse optimization &  Compaction
     optimize_storage = BashOperator(
         task_id="optimize_lakehouse_storage_finops",
         bash_command="python /opt/airflow/src/processing/lakehouse_optimize.py",
     )
 
+    # Task : Token Estimation & Domain Profiling (Gold Layer)
+    load_gold_metrics = BashOperator(
+        task_id="generate_gold_profile_warehouse",
+        bash_command="python /opt/airflow/src/processing/gold_load.py",
+    )
+
+    # Append this final task definition right below your optimize_storage task:
+    check_data_drift = BashOperator(
+        task_id="assert_statistical_data_drift",
+        bash_command="python /opt/airflow/src/monitoring/data_diff.py",
+    )
+
     # Set Up Streamflow Dependency Matrix
-    ingest_raw_data >> clean_and_transform_silver >> optimize_storage >> load_gold_metrics
+    ingest_raw_data >> clean_and_transform_silver >> optimize_storage >> load_gold_metrics >> check_data_drift
