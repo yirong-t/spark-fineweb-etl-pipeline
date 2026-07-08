@@ -17,7 +17,9 @@ def upload_to_gcs(local_path: str, bucket_name: str, destination_blob_name: str)
     """Uploads a local file to a Google Cloud Storage bucket using ADC authentication."""
     print(f"🚀 Initializing GCS Client for upload to gs://{bucket_name}/{destination_blob_name}...")
     try:
-        storage_client = storage.Client()
+        project_id = os.getenv("GCP_PROJECT_ID", "catalyst-chain-project")
+        storage_client = storage.Client(project=project_id)
+
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(destination_blob_name)
 

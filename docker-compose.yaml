@@ -7,13 +7,15 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: 'E7b_R_x1_x6Uv6Z_L9xXb3V2Z5xXb3V2Z5xXb3V2Z5w='
+    AIRFLOW__WEBSERVER__SECRET_KEY: '9b8e1c2d3e4f5a6b7c8d9e0f1a2b3c4d'
+    AIRFLOW__CORE__HOSTNAME_CALLABLE: 'airflow.utils.net.get_host_ip_address'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
     AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
     # Spark tuning inside Docker
     SPARK_HOME: /home/airflow/.local/lib/python3.10/site-packages/pyspark
     PYTHONPATH: /home/airflow/.local/lib/python3.10/site-packages/pyspark/python:/home/airflow/.local/lib/python3.10/site-packages/pyspark/python/lib/py4j-0.10.9.7-src.zip
     
-    # ─── ADDED PRODUCTION MODE & GCP TARGET VARIABLES ──────────────────────
+
     ENV_MODE: PROD
     GCS_BRONZE_BUCKET: fineweb-bronze-storage-bucket
     GCP_PROJECT_ID: catalyst-chain-project
